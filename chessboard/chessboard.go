@@ -20,7 +20,8 @@ type ChessBoard struct {
 	// 0 0 0 0 for bit for each bit represnt the castel right of q side k side and for black and white
 	// 1 0 0 0 -> blackQueen side allowed
 	// 1 1 0 0 -> blackQueen side allowed and blackKing side allowed lise so
-	castlingRights uint
+	castlingRights  uint
+	enPassantSquare int
 
 	boardMap        map[string]int
 	knightAttackMap map[int]uint64

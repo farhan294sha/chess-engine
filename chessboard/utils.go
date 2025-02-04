@@ -19,6 +19,11 @@ const (
 	WHITE
 )
 
+const (
+	rank7 uint64 = 0x00FF000000000000
+	rank2 uint64 = 0x000000000000FF00
+)
+
 func westAttacks(p, empty uint64) uint64 {
 
 	flood := p

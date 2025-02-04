@@ -1,6 +1,102 @@
 package chessboard
 
-import "math/bits"
+import (
+	"math"
+	"math/bits"
+	"unicode"
+)
+
+type Move struct {
+	From      string // Starting square index (0-63)
+	To        string // Destination square index (0-63)
+	Piece     rune   // Piece being moved (e.g., 'P')
+	Capture   rune   // Captured piece (if any)
+	Castling  bool   // True for castling
+	EnPassant bool   // True for en passant
+	Promotion rune   // Promoted piece (e.g., 'Q')
+}
+
+func (cb *ChessBoard) MakeMove(move *Move) {
+	fromIndex := cb.boardMap[move.From]
+	toIndex := cb.boardMap[move.To]
+
+	isPseudoLegal(move, cb)
+
+}
+
+func isPseudoLegal(move *Move, cb *ChessBoard) bool {
+	// find which pice
+
+	lowerPiece := unicode.ToLower(move.Piece)
+	switch lowerPiece {
+	case 'p':
+		return cb.validatePawnMove(move)
+	case 'k':
+		return cb.validateKingMove(move)
+	case 'q':
+		return cb.validateQueenMove(move)
+
+	}
+
+	return false
+	// look for attack map
+	// check if attack map is in the to pos then retun true
+}
+
+func (cb *ChessBoard) validateQueenMove(move *Move) bool {
+
+	fromIndex := cb.boardMap[move.From]
+	toIndex := cb.boardMap[move.To]
+
+	return false
+
+}
+
+func (cb *ChessBoard) validateKingMove(move *Move) bool {
+	fromIndex := cb.boardMap[move.From]
+	toIndex := cb.boardMap[move.To]
+	toKingBoard := uint64(1 << (63 - toIndex))
+
+	if cb.isWhitePlay {
+		whiteKingMoves := cb.kingAttackMap[fromIndex]
+		possbileMoves := whiteKingMoves & ^cb.whiteBoard
+		if possbileMoves&toKingBoard != 0 {
+			return true
+		}
+	} else {
+		blackKingMoves := cb.kingAttackMap[fromIndex]
+		possbileMoves := blackKingMoves & ^cb.blackBoard
+		if possbileMoves&toKingBoard != 0 {
+			return true
+		}
+	}
+	return false
+
+}
+
+func (cb *ChessBoard) validatePawnMove(move *Move) bool {
+	// Convert the "from" and "to" squares to bitboard indices
+	fromIndex := cb.boardMap[move.From]
+	toIndex := cb.boardMap[move.To]
+
+	// Ensure the "from" and "to" squares are valid
+	if fromIndex < 0 || fromIndex > 63 || toIndex < 0 || toIndex > 63 {
+		return false
+	}
+
+	// Get the pawn's bitboard representation
+	pawnBoard := uint64(1 << (63 - fromIndex))
+
+	// Generate all possible pawn moves from the "from" square
+	pawnAttackBoard := pawnMove(pawnBoard, cb)
+
+	// Check if the "to" square is part of the generated moves
+	if pawnAttackBoard&(1<<(63-toIndex)) != 0 {
+		return true
+	}
+
+	return false
+}
 
 func (cb *ChessBoard) canCastleQueenSide(color int) bool {
 	if color == WHITE {
@@ -87,22 +183,54 @@ func (cb *ChessBoard) generateKingMovesMap() {
 // chess pieces Moves
 //
 
-func pawnMove(pawnBoard uint64, color int) uint64 {
+func pawnMove(pawnBoard uint64, cb *ChessBoard) uint64 {
 	var moves uint64
 
-	if color < 0 || color > 1 {
-		panic("Invalid color provided for pawn")
-	}
+	if cb.isWhitePlay {
+		// White pawns move north
+		singlePush := northOne(pawnBoard) & ^cb.whiteBoard & ^cb.blackBoard
+		doublePush := uint64(0)
 
-	moves |= noEaOne(pawnBoard)
-	moves |= noWeOne(pawnBoard)
-	if color == WHITE {
-		moves |= northOne(pawnBoard)
+		// Check for pawn on 2nd rank
+		pawnOn2Rank := pawnBoard & rank2
+		if pawnOn2Rank != 0 {
+			doublePush = northOne(singlePush) & ^cb.whiteBoard & ^cb.blackBishop
+		}
+
+		// White captures
+		captures := (noEaOne(pawnBoard) | noWeOne(pawnBoard)) & cb.blackBoard
+
+		moves = singlePush | doublePush | captures
+
 	} else {
-		moves |= southOne(pawnBoard)
+		var doublePush uint64
+		singlePush := southOne(pawnBoard) & ^cb.whiteBoard & ^cb.blackBoard
+		isPawnIn7Rank := pawnBoard & rank7
+
+		if isPawnIn7Rank != 0 {
+			doublePush = southOne(singlePush) & ^cb.whiteBoard & ^cb.blackBishop
+		}
+
+		captures := (soEaOne(pawnBoard) | soWeOne(pawnBoard)) & cb.whiteBishop
+
+		moves = singlePush | doublePush | captures
 	}
 
 	return moves
+}
+
+func (cb *ChessBoard) updateEnPassant(move Move) {
+	fromIndex := cb.boardMap[move.From]
+	toIndex := cb.boardMap[move.To]
+	if move.Piece == 'P' && math.Abs(float64(toIndex)/8-float64(fromIndex)/8) == 2 {
+
+		cb.enPassantSquare = (fromIndex + toIndex) / 2
+	} else if move.Piece == 'p' && math.Abs(float64(toIndex)/8-float64(fromIndex)/8) == 2 {
+
+		cb.enPassantSquare = (fromIndex + toIndex) / 2
+	} else {
+		cb.enPassantSquare = -1
+	}
 }
 
 func knightMove(knightBoard uint64) uint64 {
@@ -189,8 +317,8 @@ func (cb *ChessBoard) rookMove(rookBoard uint64) uint64 {
 
 }
 
-func (cb *ChessBoard) queenMove(queen uint64) uint64 {
-	dialognalMoves := cb.bishopMove(queen)
-	horVrtiMoves := cb.rookMove(queen)
+func (cb *ChessBoard) queenMove(queenBoard uint64) uint64 {
+	dialognalMoves := cb.bishopMove(queenBoard)
+	horVrtiMoves := cb.rookMove(queenBoard)
 	return dialognalMoves | horVrtiMoves
 }
